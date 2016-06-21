@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"time"
 )
 
 func checkErr(err error) {
@@ -68,7 +69,7 @@ func spawnBackend(local, remote string) (chan struct{}, chan []byte) {
 }
 
 func listener(listen string, quit chan struct{}) {
-	buf := make([]byte, 1024)
+	buf := make([]byte, 65535)
 
 	laddr, err := net.ResolveUDPAddr("udp", listen)
 	checkErr(err)
@@ -84,12 +85,15 @@ func listener(listen string, quit chan struct{}) {
 		case <-quit:
 			return
 		default:
+			conn.SetReadDeadline(time.Now().Add(90 * time.Millisecond))
 			n, addr, err := conn.ReadFromUDP(buf)
-			log.Print("Received |", string(buf[0:n]), "| from ", addr)
-
+			if err, ok := err.(net.Error); ok && err.Timeout() {
+				continue
+			}
 			if err != nil {
 				log.Println("Error:", err)
 			}
+			log.Print("Received |", string(buf[0:n]), "| from ", addr)
 		}
 	}
 }
