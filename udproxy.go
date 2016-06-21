@@ -1,11 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
 	"net"
 	"os"
+	"time"
 )
 
 func checkErr(err error) {
@@ -14,9 +16,17 @@ func checkErr(err error) {
 	}
 }
 
+type Backend struct {
+	Upstream string        `json:"backend"`
+	Local    string        `json:"local"`
+	input    chan []byte   `json:"input"`
+	quit     chan struct{} `json:"quit"`
+}
+
 type udproxyConfig struct {
-	Backends map[string]string `json:"backends"`
-	Clients  map[string]string `json:"clients"`
+	Backends map[string]Backend `json:"backends,inline"`
+	Sockets  []string           `json:"sockets"`
+	Clients  map[string]string  `json:"clients"`
 }
 
 func backend(local, remote string, quit chan struct{}, input chan []byte) {
@@ -30,6 +40,8 @@ func backend(local, remote string, quit chan struct{}, input chan []byte) {
 	checkErr(err)
 
 	defer conn.Close()
+
+	log.Println("Ready for action", local, remote)
 
 	for {
 		select {
@@ -63,4 +75,19 @@ func main() {
 
 	err = yaml.Unmarshal(data, &config)
 	checkErr(err)
+
+	for name, backend := range config.Backends {
+		quit, input := spawnBackend(backend.Local, backend.Upstream)
+		config.Backends[name] = Backend{
+			Upstream: backend.Upstream,
+			Local:    backend.Local,
+			input:    input,
+			quit:     quit,
+		}
+	}
+
+	data, err = yaml.Marshal(config)
+	fmt.Println(string(data))
+
+	time.Sleep(90 * time.Second)
 }
