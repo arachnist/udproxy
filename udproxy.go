@@ -67,6 +67,41 @@ func spawnBackend(local, remote string) (chan struct{}, chan []byte) {
 	return quit, input
 }
 
+func listener(listen string, quit chan struct{}) {
+	buf := make([]byte, 1024)
+
+	laddr, err := net.ResolveUDPAddr("udp", listen)
+	checkErr(err)
+
+	conn, err := net.ListenUDP("udp", laddr)
+	checkErr(err)
+
+	defer conn.Close()
+	log.Println("Listener ready for action", listen)
+
+	for {
+		select {
+		case <-quit:
+			return
+		default:
+			n, addr, err := conn.ReadFromUDP(buf)
+			log.Print("Received |", string(buf[0:n]), "| from ", addr)
+
+			if err != nil {
+				log.Println("Error:", err)
+			}
+		}
+	}
+}
+
+func spawnListener(listen string) chan struct{} {
+	quit := make(chan struct{})
+
+	go listener(listen, quit)
+
+	return quit
+}
+
 func main() {
 	var config udproxyConfig
 	quit := make(chan struct{}, 1)
@@ -95,6 +130,14 @@ func main() {
 		}
 	}
 
+	for i, listen := range config.Listen {
+		quit := spawnListener(listen.Address)
+		config.Listen[i] = Listener{
+			Address: listen.Address,
+			quit:    quit,
+		}
+	}
+
 	go func() {
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, os.Interrupt)
@@ -104,6 +147,11 @@ func main() {
 		for name, backend := range config.Backends {
 			log.Println("Stopping backend", name)
 			backend.quit <- struct{}{}
+		}
+
+		for _, listen := range config.Listen {
+			log.Println("Stopping listen socket", listen.Address)
+			listen.quit <- struct{}{}
 		}
 
 		log.Println("Writing config!")
