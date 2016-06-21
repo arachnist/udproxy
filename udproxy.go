@@ -10,20 +10,13 @@ import (
 
 func checkErr(err error) {
 	if err != nil {
-		log.Fatal("Error:", err)
+		log.Fatalln("Error:", err)
 	}
 }
 
 type udproxyConfig struct {
-	Backends []struct {
-		Name           string `json:"name"`
-		BackendAddress string `json:"backend_address"`
-		LocalAddress   string `json:"local_address"`
-	} `json:"backends"`
-	Clients []struct {
-		IP      string `json:"ip"`
-		Backend string `json:"backend"`
-	} `json:"clients"`
+	Backends map[string]string `json:"backends"`
+	Clients  map[string]string `json:"clients"`
 }
 
 func backend(local, remote string, quit chan struct{}, input chan []byte) {
@@ -62,7 +55,7 @@ func main() {
 	var config udproxyConfig
 
 	if len(os.Args) < 2 {
-		log.Fatal("Usage:", os.Args[0], "<config file>")
+		log.Fatalln("Usage:", os.Args[0], "<config file>")
 	}
 
 	data, err := ioutil.ReadFile(os.Args[1])
