@@ -56,17 +56,6 @@ func main() {
 
 	rand.Seed(time.Now().UnixNano())
 
-	for name, backend := range config.Backends {
-		backends = append(backends, name)
-		quit, input := spawnBackend(backend.Local, backend.Upstream)
-		config.Backends[name] = Backend{
-			Upstream: backend.Upstream,
-			Local:    backend.Local,
-			input:    input,
-			quit:     quit,
-		}
-	}
-
 	dispatcher := func(ip net.IP, buf []byte) {
 		if _, ok := config.Clients[ip.String()]; ok {
 			config.Backends[config.Clients[ip.String()]].input <- buf
@@ -75,6 +64,17 @@ func main() {
 			log.Println("Client", ip, "not found in map, mapping to backend", backend)
 			config.Clients[ip.String()] = backend
 			config.Backends[backend].input <- buf
+		}
+	}
+
+	for name, backend := range config.Backends {
+		backends = append(backends, name)
+		quit, input := spawnBackend(backend.Local, backend.Upstream)
+		config.Backends[name] = Backend{
+			Upstream: backend.Upstream,
+			Local:    backend.Local,
+			input:    input,
+			quit:     quit,
 		}
 	}
 
