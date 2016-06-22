@@ -90,14 +90,13 @@ func listener(listen string, quit chan struct{}, dispatcher func(net.IP, []byte)
 			return
 		default:
 			conn.SetReadDeadline(time.Now().Add(90 * time.Millisecond))
-			n, addr, err := conn.ReadFromUDP(buf)
+			_, addr, err := conn.ReadFromUDP(buf)
 			if err, ok := err.(net.Error); ok && err.Timeout() {
 				continue
 			}
 			if err != nil {
 				log.Println("Error:", err)
 			}
-			log.Print("Received |", string(buf[0:n]), "| from ", addr)
 			dispatcher(addr.IP, buf)
 		}
 	}
