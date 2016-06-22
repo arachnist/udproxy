@@ -4,9 +4,11 @@ import (
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"time"
 )
 
@@ -54,7 +56,9 @@ func backend(local, remote string, quit chan struct{}, input chan []byte) {
 			return
 		case msg := <-input:
 			_, err := conn.Write(msg)
-			checkErr(err)
+			if err != nil {
+				log.Println("Couldn't send message:", err)
+			}
 		}
 	}
 }
@@ -68,8 +72,8 @@ func spawnBackend(local, remote string) (chan struct{}, chan []byte) {
 	return quit, input
 }
 
-func listener(listen string, quit chan struct{}) {
-	buf := make([]byte, 65535)
+func listener(listen string, quit chan struct{}, dispatcher func(net.IP, []byte)) {
+	buf := make([]byte, 32765)
 
 	laddr, err := net.ResolveUDPAddr("udp", listen)
 	checkErr(err)
@@ -94,20 +98,23 @@ func listener(listen string, quit chan struct{}) {
 				log.Println("Error:", err)
 			}
 			log.Print("Received |", string(buf[0:n]), "| from ", addr)
+			dispatcher(addr.IP, buf)
 		}
 	}
 }
 
-func spawnListener(listen string) chan struct{} {
+func spawnListener(listen string, dispatcher func(net.IP, []byte)) chan struct{} {
 	quit := make(chan struct{})
 
-	go listener(listen, quit)
+	go listener(listen, quit, dispatcher)
 
 	return quit
 }
 
 func main() {
 	var config udproxyConfig
+	var configLock sync.Mutex
+	var backends []string
 	quit := make(chan struct{}, 1)
 
 	if len(os.Args) < 2 {
@@ -124,7 +131,10 @@ func main() {
 	checkErr(err)
 	log.Print("Parsed configuration:\n", string(data))
 
+	rand.Seed(time.Now().UnixNano())
+
 	for name, backend := range config.Backends {
+		backends = append(backends, name)
 		quit, input := spawnBackend(backend.Local, backend.Upstream)
 		config.Backends[name] = Backend{
 			Upstream: backend.Upstream,
@@ -134,8 +144,21 @@ func main() {
 		}
 	}
 
+	dispatcher := func(ip net.IP, buf []byte) {
+		configLock.Lock()
+		defer configLock.Unlock()
+		if _, ok := config.Clients[ip.String()]; ok {
+			config.Backends[config.Clients[ip.String()]].input <- buf
+		} else {
+			backend := backends[rand.Intn(len(backends))]
+			log.Println("Client", ip, "not found in map, mapping to backend", backend)
+			config.Clients[ip.String()] = backend
+			config.Backends[backend].input <- buf
+		}
+	}
+
 	for i, listen := range config.Listen {
-		quit := spawnListener(listen.Address)
+		quit := spawnListener(listen.Address, dispatcher)
 		config.Listen[i] = Listener{
 			Address: listen.Address,
 			quit:    quit,
@@ -159,6 +182,8 @@ func main() {
 		}
 
 		log.Println("Writing config!")
+		configLock.Lock()
+		defer configLock.Unlock()
 		data, err = yaml.Marshal(config)
 		checkErr(err)
 
