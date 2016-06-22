@@ -31,7 +31,7 @@ func listener(listen string, quit chan struct{}, dispatcher func(net.IP, []byte)
 			if err != nil {
 				log.Println("Error:", err)
 			}
-			dispatcher(addr.IP, buf[0:n])
+			go dispatcher(addr.IP, buf[0:n])
 		}
 	}
 }
