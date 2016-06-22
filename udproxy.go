@@ -98,9 +98,10 @@ func main() {
 		}
 
 		for _, listen := range config.Listen {
+			q := listen.quit
 			log.Println("Stopping listen socket", listen.Address)
 			// no need to block here…
-			go func() { listen.quit <- struct{}{} }()
+			go func() { q <- struct{}{} }()
 		}
 
 		log.Println("Writing config!")
