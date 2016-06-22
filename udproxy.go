@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"sync"
 	"time"
 )
 
@@ -112,7 +111,6 @@ func spawnListener(listen string, dispatcher func(net.IP, []byte)) chan struct{}
 
 func main() {
 	var config udproxyConfig
-	var configLock sync.Mutex
 	var backends []string
 	quit := make(chan struct{}, 1)
 
@@ -144,8 +142,6 @@ func main() {
 	}
 
 	dispatcher := func(ip net.IP, buf []byte) {
-		configLock.Lock()
-		defer configLock.Unlock()
 		if _, ok := config.Clients[ip.String()]; ok {
 			config.Backends[config.Clients[ip.String()]].input <- buf
 		} else {
@@ -177,12 +173,11 @@ func main() {
 
 		for _, listen := range config.Listen {
 			log.Println("Stopping listen socket", listen.Address)
-			listen.quit <- struct{}{}
+			// no need to block here…
+			go func() { listen.quit <- struct{}{} }()
 		}
 
 		log.Println("Writing config!")
-		configLock.Lock()
-		defer configLock.Unlock()
 		data, err = yaml.Marshal(config)
 		checkErr(err)
 
