@@ -7,7 +7,7 @@ import (
 )
 
 func listener(listen string, quit chan struct{}, dispatcher func(net.IP, []byte)) {
-	buf := make([]byte, 32765)
+	buf := make([]byte, 50000)
 
 	laddr, err := net.ResolveUDPAddr("udp", listen)
 	checkErr(err)
@@ -24,14 +24,14 @@ func listener(listen string, quit chan struct{}, dispatcher func(net.IP, []byte)
 			return
 		default:
 			conn.SetReadDeadline(time.Now().Add(90 * time.Millisecond))
-			_, addr, err := conn.ReadFromUDP(buf)
+			n, addr, err := conn.ReadFromUDP(buf)
 			if err, ok := err.(net.Error); ok && err.Timeout() {
 				continue
 			}
 			if err != nil {
 				log.Println("Error:", err)
 			}
-			dispatcher(addr.IP, buf)
+			dispatcher(addr.IP, buf[0:n])
 		}
 	}
 }
