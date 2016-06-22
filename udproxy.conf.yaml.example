@@ -1,0 +1,14 @@
+backends:
+  bla1:
+    upstream: 127.0.0.1:2137
+    local: 127.0.0.1:1137
+  bla2:
+    upstream: 127.0.0.1:2138
+    local: 127.0.0.1:1138
+listen:
+- address: :1337
+- address: :31337
+clients:
+  10.24.10.1: bla1
+  10.24.250.1: bla1
+  127.0.0.1: bla2
