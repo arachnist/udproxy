@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"time"
 )
 
@@ -37,6 +38,7 @@ type udproxyConfig struct {
 
 func main() {
 	var config udproxyConfig
+	var configLock sync.Mutex
 	var backends []string
 	quit := make(chan struct{}, 1)
 
@@ -57,6 +59,8 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 
 	dispatcher := func(ip net.IP, buf []byte) {
+		configLock.Lock()
+		defer configLock.Unlock()
 		if _, ok := config.Clients[ip.String()]; ok {
 			config.Backends[config.Clients[ip.String()]].input <- buf
 		} else {
